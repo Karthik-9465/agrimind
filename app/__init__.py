@@ -1,0 +1,1 @@
+# Agrimind Agentic Application Package
