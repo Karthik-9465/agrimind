@@ -1,0 +1,19 @@
+Title: Cotton and Chilli Integrated Crop Management Guide
+Source Document: ICAR - Central Institute for Cotton Research & Indian Institute of Horticultural Research (IIHR) Extension Bulletin
+Topic: Agronomy, Pest Management, Fertigation and Harvesting
+
+1. COTTON SOWING, SPACING AND CANOPY MANAGEMENT
+Cotton thrives in deep black cotton soils (Vertisols) with good drainage and neutral to slightly alkaline pH (7.0 - 8.2). Sowing should be synchronized with the onset of monsoon rains. Optimal row spacing for hybrid Bt cotton is 90 cm to 120 cm between rows and 45 cm to 60 cm between plants within a row (density of approx. 7,400 to 9,800 plants/acre). Thinning to a single vigorous seedling per hill should be completed by 15-20 days after emergence. Square formation begins around 35-45 days, followed by peak flowering at 60-70 days. Maintain uniform soil moisture during square formation and early boll development; moisture stress at this stage induces extensive flower and young boll shedding.
+
+2. COTTON SUCKING PEST AND PINK BOLLWORM MANAGEMENT
+Major insect pests include early-season sucking pests (aphids, jassids, thrips, and whiteflies) and late-season Pink Bollworm (Pectinophora gossypiella).
+- For sucking pests: Install yellow and blue sticky traps (10 traps/acre). Conserve predatory ladybird beetles and chrysoperla. In early infestation, spray 5% Neem Seed Kernel Extract (NSKE) or 0.5% neem oil emulsion. Avoid prophylactic synthetic pyrethroid sprays which trigger secondary whitefly surges.
+- For Pink Bollworm: Install pheromone traps with Gossyplure at 5 traps/acre for surveillance. Spray certified Bt bio-formulations or approved spinosad / chlorantraniliprole only when trap catches exceed economic threshold levels (8 moths/trap/night for 3 consecutive nights) or 10% rosette flowers appear.
+
+3. CHILLI NURSERY, TRANSPLANTING AND IRRIGATION
+Chilli requires well-drained sandy loam or clay loam rich in organic matter. Prepare raised nursery beds 15 cm high and 1 m wide to prevent damping-off disease caused by Pythium spp. Drench nursery beds with Trichoderma viride enriched compost. Healthy 30-35 day old seedlings are transplanted at a spacing of 60 cm x 45 cm on ridges or drip-irrigated beds. Chilli is extremely sensitive to waterlogging. Ensure furrow drainage or use drip lines with 2 L/hr emitters spaced at 30-40 cm. Drip fertigation enhances nitrogen use efficiency and reduces flower dropping by up to 35%.
+
+4. CHILLI LEAF CURL VIRUS AND DIE-BACK ANTHRACNOSE CONTROL
+- Chilli Leaf Curl (ChLCV) is transmitted by the whitefly vector (Bemisia tabaci). Symptoms include upward curling, leaf puckering, vein thickening, and stunting. Management requires growing border crops of maize or sorghum (4 rows) to act as live wind/insect barriers. Rogue and burn infected plants immediately. Spray neem formulations or systemic insecticides at recommended rates during early vegetative growth to manage vector populations.
+- Anthracnose / Die-back (Colletotrichum capsici) manifests as sunken circular necrotic spots on ripening pods and die-back of branches from top downwards. Collect and burn infected plant debris. Treat seeds with Trichoderma harzianum (10 g/kg). Apply prophylactic sprays of Copper Oxychloride (0.25%) or Azoxystrobin (0.1%) during cloudy, humid flowering weather.
+

@@ -9,10 +9,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from app.modules.agent.tools.disease import diagnose_crop_disease_with_gemini
 
 def test_live_gemini_vision_call():
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        print("\nGEMINI_API_KEY is not set in environment. Skipping live API call test.")
-        return
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    # Official Google AI Studio keys start with AIzaSy
+    if not api_key or api_key.startswith("your_") or not api_key.startswith("AIzaSy"):
+        pytest.skip("Valid live GEMINI_API_KEY (AIzaSy...) is not configured in environment. Skipping live Gemini network call.")
 
     img = Image.new("RGB", (200, 200), color="green")
     buf = io.BytesIO()

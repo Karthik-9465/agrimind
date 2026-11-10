@@ -1,7 +1,10 @@
+import io
 import json
+import base64
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -11,10 +14,99 @@ from app.modules.farm import service as farm_service
 from app.modules.agent import schemas
 from app.modules.agent.image_validator import validate_and_decode_image
 from app.modules.agent.engine import agent_engine
+from app.modules.agent.voice_service import GnaniVoiceService
+from app.modules.agent.tools.weather import get_weather_forecast
+from app.modules.agent.tools.irrigation import calculate_irrigation_schedule
+from app.modules.agent.tools.fertilizer import get_fertilizer_recommendation
+from app.modules.agent.tools.market import get_market_prices
+from app.modules.agent.tools.knowledge import search_crop_knowledge
 
 logger = logging.getLogger("agrimind.agent.router")
 
-router = APIRouter(prefix="/api/v1/agent", tags=["Agent & Diagnosis"])
+router = APIRouter(prefix="/api/v1/agent", tags=["Agent, Diagnosis & Voice"])
+
+# -----------------------------------------------------------------------------
+# 1. Voice Interaction Endpoints (Gnani AI Prisma & Timbre)
+# -----------------------------------------------------------------------------
+
+@router.post("/voice/transcribe", response_model=schemas.VoiceTranscribeResponse)
+async def transcribe_voice_audio(
+    file: UploadFile = File(...),
+    language: str = Form("te")
+):
+    """
+    Transcribes farmer speech audio using official Gnani Prisma STT (v3.0).
+    Preprocesses and standardizes audio to 16kHz mono 16-bit PCM WAV.
+    Supports Telugu ('te'), Hindi ('hi'), English ('en'), and auto-detection ('auto').
+    Provides transparent development mock mode when GNANI_API_KEY is not configured.
+    """
+    try:
+        audio_bytes = await file.read()
+        if not audio_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded audio file is empty.")
+
+        result = GnaniVoiceService.transcribe_audio(
+            audio_bytes=audio_bytes,
+            filename=file.filename or "speech.webm",
+            content_type=file.content_type or "audio/webm",
+            language=language
+        )
+        return schemas.VoiceTranscribeResponse(**result)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.warning(f"Voice audio validation error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Voice transcription error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Gnani Speech-to-Text service error: {str(e)}"
+        )
+
+@router.post("/voice/synthesize")
+def synthesize_voice_speech(
+    request: schemas.VoiceSynthesizeRequest
+):
+    """
+    Synthesizes speech audio from text using official Gnani Timbre TTS (v3.0).
+    Returns audio stream (.wav or .mp3).
+    """
+    try:
+        audio_bytes, content_type, is_mock, provider = GnaniVoiceService.synthesize_speech(
+            text=request.text,
+            language=request.language,
+            speed=request.speed,
+            voice=request.voice,
+            container=request.container
+        )
+        return Response(
+            content=audio_bytes,
+            media_type=content_type,
+            headers={
+                "X-Audio-Provider": provider,
+                "X-Audio-Mock": str(is_mock)
+            }
+        )
+    except ValueError as e:
+        logger.warning(f"Voice synthesis validation error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Voice synthesis error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Gnani Text-to-Speech service error: {str(e)}"
+        )
+
+# -----------------------------------------------------------------------------
+# 2. Main Agent Orchestrator Chat Endpoint
+# -----------------------------------------------------------------------------
 
 @router.post("/chat", response_model=schemas.ChatResponse)
 def agent_chat(
@@ -25,10 +117,12 @@ def agent_chat(
     """
     JWT Protected AI Agronomist chat endpoint.
     Routes queries dynamically across Disease Diagnosis, Irrigation, Fertilizer, Weather, Market, and Knowledge RAG.
+    Supports regional response languages (Telugu, Hindi, English).
     """
     crop_context_str = ""
     farm_location_str = "Mandya, India"
     soil_type_str = "Loam"
+    field_area_acres = 1.0
 
     # 1. Validate Farm & Crop Ownership Authorization
     if request.farm_id:
@@ -41,6 +135,7 @@ def agent_chat(
         crop_context_str += f"Farm: {farm.name} ({farm.soil_type} soil). "
         farm_location_str = farm.location
         soil_type_str = farm.soil_type
+        field_area_acres = farm.area_acres or 1.0
 
     if request.crop_id:
         if not request.farm_id:
@@ -68,7 +163,13 @@ def agent_chat(
                 detail=f"Image validation failed: {str(ve)}"
             )
 
-    # 3. Process Request with Agent Engine
+    # 3. Pull farm context for farm_management_tool
+    user_farms = farm_service.get_farms_by_owner(db, owner_id=current_user.id)
+    farm_data = {
+        "farms": [{"name": f.name, "location": f.location, "acres": f.area_acres, "soil": f.soil_type} for f in user_farms]
+    }
+
+    # 4. Process Request with Agent Engine
     try:
         reply, tool_used, assessment, irrigation, fertilizer, weather, market, knowledge = agent_engine.process_request(
             request=request,
@@ -76,7 +177,9 @@ def agent_chat(
             mime_type="image/jpeg",
             crop_context=crop_context_str,
             farm_location=farm_location_str,
-            soil_type=soil_type_str
+            soil_type=soil_type_str,
+            field_area=field_area_acres,
+            farm_data=farm_data
         )
     except RuntimeError as re:
         logger.error(f"Agent engine service error: {str(re)}")
@@ -91,7 +194,7 @@ def agent_chat(
             detail="An internal server error occurred while processing your request."
         )
 
-    # 4. Database Persistence of Disease Report if disease tool ran
+    # 5. Database Persistence of Disease Report if disease diagnosis ran
     report_id: Optional[str] = None
     if assessment:
         db_report = DiseaseReport(
@@ -126,14 +229,84 @@ def agent_chat(
         report_id=report_id
     )
 
+# -----------------------------------------------------------------------------
+# 3. Direct Tool REST Endpoints for Dedicated Dashboard Views
+# -----------------------------------------------------------------------------
+
+@router.get("/weather", response_model=schemas.WeatherResult)
+def get_weather_endpoint(
+    location: str = Query("Mandya, India", description="City or district location")
+):
+    """Direct live weather forecast and spraying advisory endpoint."""
+    return get_weather_forecast(location=location)
+
+@router.post("/irrigation/calculate", response_model=schemas.IrrigationResult)
+def calculate_irrigation_endpoint(
+    crop: str = Form(...),
+    soil_type: str = Form("Loam"),
+    growth_stage: str = Form("vegetative"),
+    location: str = Form("Mandya, India"),
+    irrigation_method: str = Form("drip"),
+    field_area_acres: float = Form(1.0),
+    soil_moisture_percent: Optional[float] = Form(None)
+):
+    """Direct FAO-56 Penman-Monteith smart irrigation calculation endpoint."""
+    weather = get_weather_forecast(location=location)
+    return calculate_irrigation_schedule(
+        crop_name=crop,
+        soil_type=soil_type,
+        growth_stage=growth_stage,
+        temp_c=weather.temperature_c,
+        rainfall_mm=weather.rainfall_mm,
+        soil_moisture_percent=soil_moisture_percent,
+        irrigation_method=irrigation_method,
+        field_area_acres=field_area_acres
+    )
+
+@router.post("/fertilizer/calculate", response_model=schemas.FertilizerResult)
+def calculate_fertilizer_endpoint(
+    crop: str = Form(...),
+    soil_type: str = Form("Loam"),
+    growth_stage: str = Form("basal"),
+    soil_ph: Optional[float] = Form(None),
+    soil_n_status: Optional[str] = Form("medium"),
+    soil_p_status: Optional[str] = Form("medium"),
+    soil_k_status: Optional[str] = Form("medium"),
+    field_area_acres: float = Form(1.0)
+):
+    """Direct ICAR STCR rule-based fertilizer dose calculation endpoint."""
+    return get_fertilizer_recommendation(
+        crop_name=crop,
+        soil_type=soil_type,
+        growth_stage=growth_stage,
+        soil_ph=soil_ph,
+        soil_n_status=soil_n_status,
+        soil_p_status=soil_p_status,
+        soil_k_status=soil_k_status,
+        field_area_acres=field_area_acres
+    )
+
+@router.get("/market/prices", response_model=schemas.MarketResult)
+def get_market_prices_endpoint(
+    commodity: str = Query("Tomato", description="Crop or commodity name"),
+    location: str = Query("", description="State or Mandi location")
+):
+    """Direct APMC Mandi commodity market price lookup endpoint."""
+    return get_market_prices(commodity=commodity, state_or_mandi=location)
+
+@router.get("/knowledge/search", response_model=schemas.KnowledgeResult)
+def search_knowledge_endpoint(
+    query: str = Query(..., description="Crop management query")
+):
+    """Direct agronomy RAG knowledge base search endpoint."""
+    return search_crop_knowledge(query=query)
+
 @router.get("/reports", response_model=List[schemas.DiseaseReportResponse])
 def get_user_disease_reports(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Returns historical disease reports for the authenticated user.
-    """
+    """Returns historical disease reports for the authenticated user."""
     reports = db.query(DiseaseReport).filter(DiseaseReport.user_id == current_user.id).order_by(DiseaseReport.created_at.desc()).all()
     
     result = []

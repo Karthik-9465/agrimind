@@ -1,0 +1,23 @@
+Title: Maize and Pulse Production Technologies & Soil Fertility Handbook
+Source Document: ICAR - Indian Institute of Maize Research (IIMR) & Indian Institute of Pulses Research (IIPR) Handbook
+Topic: Crop Nutrition, Water Management, and Biological Nitrogen Fixation
+
+1. MAIZE WATER AND NUTRIENT REQUIREMENTS
+Maize is highly sensitive to moisture stress at two critical phenological stages:
+1. Tasseling and silking (flowering) stage (45-55 days after sowing).
+2. Grain filling / blister milk stage (65-75 days after sowing).
+Moisture stress during flowering inhibits pollen viability and silking synchronization, leading to poorly filled cobs and barren ears. Ensure soil moisture does not deplete below 50% Available Water Capacity (AWC). For fertilization, split nitrogen into three equal doses: 1/3rd basal at sowing, 1/3rd at knee-high stage (V6 - 25 days), and 1/3rd at pre-tasseling stage. Apply 10 kg/acre Zinc Sulfate at sowing in zinc-deficient calcareous soils to prevent 'white bud' disease.
+
+2. FALL ARMYWORM (FAW) MANAGEMENT IN MAIZE
+Spodoptera frugiperda (Fall Armyworm) causes catastrophic foliar shredding and whorl feeding.
+- Scout fields weekly from 7 days after emergence. Look for pinholes, windowing of leaves, and coarse sawdust-like frass in the central whorl.
+- Install pheromone traps at 4 traps/acre.
+- At 5% plant infestation (egg mass / early instars): Spray 5% NSKE or Bacillus thuringiensis (Bt) kurstaki formulation @ 2 g/liter directly into the central whorl.
+- At 10-20% plant infestation: Apply approved entomopathogenic fungi Metarhizium rileyi or whorl application of sand-lime mixture (9:1) or chlorantraniliprole 18.5 SC (0.4 ml/L) directed inside the whorl funnel using a knapsack sprayer with nozzle cap removed.
+
+3. PULSES (RED GRAM / PIGEONPEA, CHICKPEA, GREEN GRAM) INOCULATION AND PHOSPHORUS
+Pulses enrich soil through biological nitrogen fixation (BNF) in root nodules.
+- Seed Inoculation: Always treat pulse seeds with specific Rhizobium culture (200 g/10 kg seed) and Phosphate Solubilizing Bacteria (PSB) along with Trichoderma viride. This enhances nodulation efficiency and supplies up to 30 kg N/ha naturally to the soil.
+- Phosphorus Nutrition: Pulses respond strongly to phosphorus (20-30 kg P2O5/acre applied as basal Single Super Phosphate). SSP supplies calcium and 12% sulfur, which are essential for amino acid synthesis (methionine and cysteine) and protein formation.
+- Pod Borer (Helicoverpa armigera) Management: Set up bird perches (15-20 per acre) at flowering. Spray HaNPV (Helicoverpa Nuclear Polyhedrosis Virus) @ 250 LE/acre with 0.1% jaggery as adjuvant in the evening. Spray neem oil (3000 ppm) at early flowering.
+
