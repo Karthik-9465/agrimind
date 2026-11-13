@@ -223,7 +223,23 @@ def calculate_irrigation_schedule(
 
     # 3. Soil Water Reservoir & Readily Available Water (RAW)
     # RAW (mm) = p * AWC * Zr
-    soil_info = SOIL_AWC_MAP.get(soil_key, SOIL_AWC_MAP["loam"])
+    normalized_soil = "loam"
+    if "black" in soil_key:
+        normalized_soil = "black clay"
+    elif "red" in soil_key:
+        normalized_soil = "red sandy"
+    elif "clay loam" in soil_key:
+        normalized_soil = "clay loam"
+    elif "clay" in soil_key:
+        normalized_soil = "clay"
+    elif "sand" in soil_key:
+        normalized_soil = "sandy"
+    elif "silt" in soil_key:
+        normalized_soil = "silt"
+    elif soil_key in SOIL_AWC_MAP:
+        normalized_soil = soil_key
+
+    soil_info = SOIL_AWC_MAP.get(normalized_soil, SOIL_AWC_MAP["loam"])
     awc_mm_per_m = soil_info["awc_mm_per_m"]
     total_available_water_mm = awc_mm_per_m * root_depth_m
     raw_mm = round(total_available_water_mm * depletion_p, 1)

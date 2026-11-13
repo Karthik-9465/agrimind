@@ -97,6 +97,30 @@ class Settings:
         return (os.getenv("GNANI_MODE") or "").strip().upper()
 
     @staticmethod
+    def get_gnani_stt_connect_timeout() -> float:
+        try:
+            val = float(os.getenv("GNANI_STT_CONNECT_TIMEOUT", "10.0"))
+            return max(1.0, min(val, 30.0))
+        except ValueError:
+            return 10.0
+
+    @staticmethod
+    def get_gnani_stt_timeout() -> float:
+        try:
+            val = float(os.getenv("GNANI_STT_TIMEOUT", "35.0"))
+            return max(5.0, min(val, 120.0))
+        except ValueError:
+            return 35.0
+
+    @staticmethod
+    def get_gnani_stt_max_retries() -> int:
+        try:
+            val = int(os.getenv("GNANI_STT_MAX_RETRIES", "3"))
+            return max(1, min(val, 5))
+        except ValueError:
+            return 3
+
+    @staticmethod
     def get_database_url() -> str:
         return (os.getenv("DATABASE_URL") or "sqlite:///./agrimind.db").strip()
 

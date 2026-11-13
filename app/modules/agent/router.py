@@ -2,6 +2,7 @@ import io
 import json
 import base64
 import logging
+import requests
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from fastapi.responses import Response
@@ -11,7 +12,7 @@ from app.db.session import get_db
 from app.db.models import User, DiseaseReport
 from app.modules.auth.router import get_current_user
 from app.modules.farm import service as farm_service
-from app.modules.agent import schemas
+from app.modules.agent import schemas, nlu
 from app.modules.agent.image_validator import validate_and_decode_image
 from app.modules.agent.engine import agent_engine
 from app.modules.agent.voice_service import GnaniVoiceService
@@ -60,12 +61,48 @@ async def transcribe_voice_audio(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    except Exception as e:
-        logger.error(f"Voice transcription error: {str(e)}")
+    except PermissionError as e:
+        logger.error(f"Voice transcription authentication error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+    except (TimeoutError, requests.exceptions.Timeout) as e:
+        logger.error(f"Voice transcription timeout: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=f"Gnani Speech-to-Text timeout: {str(e)}"
+        )
+    except (ConnectionError, requests.exceptions.ConnectionError) as e:
+        logger.error(f"Voice transcription connection error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Gnani Speech-to-Text service error: {str(e)}"
+            detail=f"Gnani Speech-to-Text connection error: {str(e)}"
         )
+    except Exception as e:
+        logger.error(f"Voice transcription error: {str(e)}", exc_info=True)
+        err_msg = str(e)
+        err_lower = err_msg.lower()
+        if "authentication failed" in err_lower or "invalid_api_key" in err_lower:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Gnani Speech-to-Text authentication error: {err_msg}"
+            )
+        elif "rate limit" in err_lower or "rate_limited" in err_lower or "429" in err_lower:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Gnani Speech-to-Text rate limited: {err_msg}"
+            )
+        elif "timed out" in err_lower or "timeout" in err_lower:
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=f"Gnani Speech-to-Text timeout: {err_msg}"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Gnani Speech-to-Text service error: {err_msg}"
+            )
 
 @router.post("/voice/synthesize")
 def synthesize_voice_speech(
@@ -183,9 +220,14 @@ def agent_chat(
         )
     except RuntimeError as re:
         logger.error(f"Agent engine service error: {str(re)}")
+        err_detail = (
+            "Crop disease diagnosis service is temporarily unavailable. Please try again later."
+            if image_bytes
+            else "Agricultural AI service encountered a temporary error. Please try again shortly."
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Crop disease diagnosis service is temporarily unavailable. Please try again later."
+            detail=err_detail
         )
     except Exception as e:
         logger.error(f"Unexpected error during chat processing: {str(e)}")
@@ -217,9 +259,12 @@ def agent_chat(
         db.refresh(db_report)
         report_id = db_report.id
 
+    _, detected_lang = nlu.detect_language_and_style(request.message, request.language)
+
     return schemas.ChatResponse(
         reply=reply,
         tool_used=tool_used,
+        detected_language=detected_lang,
         assessment=assessment,
         irrigation=irrigation,
         fertilizer=fertilizer,

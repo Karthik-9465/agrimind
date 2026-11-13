@@ -1,62 +1,68 @@
 import re
 from typing import Tuple
 
+
 class AgriMindGuardrail:
     """
-    Input safety and domain relevance guardrails for AgriMind AI Agent.
-    Enforces safety policies and prevents non-agricultural off-topic queries.
-    Supports English, Telugu (తెలుగు), and Hindi (हिन्दी) agricultural vocabularies.
+    Input safety and open-domain relevance guardrails for AgriMind AI Agent.
+    Blocks harmful/injection prompts and clear unrelated off-topic spam, while allowing
+    any legitimate or unfamiliar agricultural, livestock, soil, rural, or follow-up question
+    across English, Telugu, Hindi, and Romanized regional dialects.
     """
 
     # Unsafe / Harmful content & prompt injection patterns
     UNSAFE_PATTERNS = [
         r'\b(bomb|weapon|explosive|hack|malware|virus|exploit|jailbreak|ignore previous|ignore system|dan mode|bypass|override system)\b',
-        r'\b(suicide|self-harm|illegal drug|cocaine|meth|stolen credit card)\b'
+        r'\b(suicide|self-harm|illegal drug|cocaine|meth|stolen credit card)\b',
+        r'\b(poison human|harm someone|make poison|lethal dose for human)\b',
     ]
 
-    # Whitelisted domain keywords (English agricultural context)
-    AGRI_KEYWORDS_EN = [
-        r'\b(crop|farm|farmer|farming|field|soil|plant|planting|seed|seedling|harvest|irrigation|water|watering|moisture|drip|sprinkler)\b',
-        r'\b(fertilizer|npk|urea|dap|mop|nitrogen|phosphorus|potassium|compost|manure|nutrient|nutrients|yield|pesticide|fungicide)\b',
-        r'\b(disease|blight|fungus|fungal|rot|rust|wilt|pest|pests|bug|insects|worm|aphids|whitefly|lesion|spot|spots|diagnosis|diagnose)\b',
-        r'\b(weather|rain|rainfall|temperature|humidity|wind|cloud|sunny|drought|climate|forecast)\b',
-        r'\b(price|prices|mandi|apmc|market|rate|rates|cost|quintal|commodity|sell|buy crops)\b',
-        r'\b(tomato|potato|rice|paddy|wheat|maize|corn|cotton|sugarcane|onion|chilli|soybean|groundnut|mustard|apple|mango|banana)\b',
-        r'\b(guide|handbook|practices|cultivation|spacing|depth|sowing|loam|clay|sandy|ph|acidity|alkalinity|rotation)\b',
-        r'\b(agrimind|agronomy|agronomist|agriculture|agritech|livestock|cattle|poultry)\b'
+    # Strong agricultural domain signals (do not include ambiguous commerce words like 'market' or 'prices')
+    AGRI_SIGNAL_PATTERNS = [
+        r'\b(crop|crops|farm|farmer|farming|field|soil|plant|planting|seed|seeds|seedling|harvest|irrigation|water|watering|moisture|drip|sprinkler)\b',
+        r'\b(fertilizer|npk|urea|dap|mop|nitrogen|phosphorus|potassium|potash|compost|vermicompost|manure|nutrient|nutrients|yield|pesticide|fungicide|herbicide)\b',
+        r'\b(disease|blight|fungus|fungal|rot|rust|wilt|pest|pests|insect|insects|worm|aphids|whitefly|lesion|spot|spots|diagnosis|diagnose|weed|weeds)\b',
+        r'\b(weather|rain|rainfall|temperature|humidity|drought|forecast|monsoon)\b',
+        r'\b(mandi|apmc|agmarknet|quintal|commodity|msp|enam)\b',
+        r'\b(tomato|potato|rice|paddy|wheat|maize|corn|cotton|sugarcane|onion|chilli|soybean|groundnut|mustard|apple|mango|banana|turmeric|pulse|millet)\b',
+        r'\b(agrimind|agronomy|agronomist|agriculture|agricultural|horticulture|floriculture|sericulture|apiculture|aquaculture|fisheries)\b',
+        r'\b(livestock|cattle|dairy|milk|cow|buffalo|goat|sheep|poultry|hen|broiler|beekeeping|honey|bee|tractor|rotavator|greenhouse|polyhouse|hydroponic)\b',
+        r'\b(pm-kisan|pm kisan|subsidy|crop insurance|fasal bima|kcc|kisan|rythu|organic|jeevamrutham|mulch|mulching|biofloc|fodder|silage)\b',
+        # Romanized Telugu / Hindi agriculture roots
+        r'\b(panta|pantaku|eruvu|eruvulu|poota|poshakalu|bhoomi|regadi|neeru|tegulu|purugu|patti|mirchi|tamata|fasal|kheti|mitti|khad|sinchai|paani)\b',
+        # Indic script presence (Telugu or Devanagari)
+        r'[\u0C00-\u0C7F\u0900-\u097F]',
     ]
 
-    # Telugu (తెలుగు) Agricultural Domain Keywords
-    AGRI_KEYWORDS_TE = [
-        r'(పంట|పంటలు|వ్యవసాయం|రైతు|భూమి|నేల|మట్టి|విత్తనం|నాటు|కోత|సాగు|నీరు|నీటి|తడి|డ్రిప్)',
-        r'(ఎరువు|ఎరువులు|యూరియా|డిఎపి|పోటాష్|నత్రజని|భాస్వరం|సేంద్రీయ|పురుగు|మందు|తెగులు|వ్యాధి|మచ్చ|తెగుళ్లు)',
-        r'(వాతావరణం|వర్షం|ఎండ|ఉష్ణోగ్రత|తేమ|గాలి|ధర|ధరలు|మార్కెట్|మండి|క్వింటాల్|రేటు|టమాటా|వరి|గోధుమ|పత్తి|మిర్చి|మొక్కజొన్న)'
-    ]
-
-    # Hindi (हिन्दी) Agricultural Domain Keywords
-    AGRI_KEYWORDS_HI = [
-        r'(फसल|खेती|किसान|खेत|मिट्टी|बीज|बुवाई|कटाई|सिंचाई|पानी|नमी|ड्रिप|फव्वारा)',
-        r'(उर्वरक|खाद|यूरिया|डीएपी|पोटाश|नाइट्रोजन|फास्फोरस|जैविक|कीटनाशक|रोग|बीमारी|धब्बा|कीट|इल्ली)',
-        r'(मौसम|बारिश|वर्षा|तापमान|आर्द्रता|हवा|मंडी|भाव|दाम|मूल्य|क्विंटल|टमाटर|धान|गेहूं|कपास|मिर्च|मक्का)'
-    ]
-
-    # Explicit off-topic non-agricultural triggers
+    # Explicit non-agricultural off-topic patterns (only enforced when no strong agri signal is present)
     OFF_TOPIC_PATTERNS = [
-        r'\b(python scraper|write python|coding tutorial|c\+\+|javascript|react component|html layout)\b',
-        r'\b(stock market|crypto|bitcoin|option trading|wall street|forex|invest in stock)\b',
-        r'\b(movie script|hollywood|write a story|poetry|sing a song|essay on sports|nfl|nba|football match)\b',
-        r'\b(president|election|political party|prime minister|politics)\b'
+        r'\b(python scraper|write python|coding tutorial|c\+\+|javascript|react component|html layout|web scraper|sql injection tutorial)\b',
+        r'\b(stock market|crypto|bitcoin|ethereum|option trading|wall street|forex|invest in stock)\b',
+        r'\b(movie script|hollywood|bollywood gossip|write a story|essay on sports|nfl|nba|football match|cricket score)\b',
+        r'\b(election campaign|political party|vote for)\b',
     ]
+
+    OFF_TOPIC_MESSAGE = (
+        "I am AgriMind AI, your specialized agricultural assistant. "
+        "I can assist with farming, crops, soil health, livestock/dairy, irrigation, fertilizers, "
+        "pests, weather, agricultural schemes, and Mandi market topics. "
+        "Please ask an agriculture-related question!"
+    )
+
+    @classmethod
+    def has_agricultural_signal(cls, text: str) -> bool:
+        """Non-blocking helper to detect strong agricultural domain cues."""
+        low = (text or "").lower()
+        return any(re.search(pat, low) for pat in cls.AGRI_SIGNAL_PATTERNS)
 
     @classmethod
     def validate_input(cls, text: str, has_image: bool = False) -> Tuple[bool, str, str]:
         """
-        Validates input query.
-        Returns tuple of (is_valid: bool, category: str, refusal_message: str).
-        Categories: "SAFE_AGRICULTURAL", "UNSAFE_PROMPT", "OFF_TOPIC".
+        Validates input query safety and filters clear off-topic non-agricultural spam.
+        Unfamiliar or open-domain questions without explicit off-topic patterns are permitted
+        so semantic reasoning can handle any agricultural topic or follow-up turn.
         """
         if not text or not text.strip():
-            # Empty text with image is valid for image analysis
             if has_image:
                 return True, "SAFE_AGRICULTURAL", ""
             return False, "OFF_TOPIC", "Please provide a query or upload a crop photo for diagnosis."
@@ -71,37 +77,15 @@ class AgriMindGuardrail:
                     "safety and security policies."
                 )
 
-        # 2. Image attachment automatically bypasses text off-topic checks
+        # 2. Image attachment bypasses text off-topic checks
         if has_image:
             return True, "SAFE_AGRICULTURAL", ""
 
-        # 3. Explicit Off-Topic Trigger Check
-        for pattern in cls.OFF_TOPIC_PATTERNS:
-            if re.search(pattern, text_lower):
-                return False, "OFF_TOPIC", (
-                    "I am AgriMind AI, your specialized agricultural assistant. "
-                    "I can only assist with farming, crop health, irrigation, fertilizer guidance, weather forecasts, and Mandi market prices. "
-                    "Please ask a farming-related question!"
-                )
+        # 3. Block explicit unrelated off-topic triggers unless strong agricultural context is present
+        if not cls.has_agricultural_signal(text):
+            for pattern in cls.OFF_TOPIC_PATTERNS:
+                if re.search(pattern, text_lower):
+                    return False, "OFF_TOPIC", cls.OFF_TOPIC_MESSAGE
 
-        # 4. Keyword relevance check across English, Telugu, and Hindi
-        is_agri_en = any(re.search(pat, text_lower) for pat in cls.AGRI_KEYWORDS_EN)
-        is_agri_te = any(re.search(pat, text) for pat in cls.AGRI_KEYWORDS_TE)
-        is_agri_hi = any(re.search(pat, text) for pat in cls.AGRI_KEYWORDS_HI)
-
-        is_agri_related = is_agri_en or is_agri_te or is_agri_hi
-
-        # Allow general greetings & short general agronomy questions
-        is_greeting_or_short = len(text_lower.split()) <= 4 or text_lower in ["hi", "hello", "hey", "help", "good morning", "good evening"]
-
-        # Check for Indian non-ASCII scripts (Telugu / Devanagari)
-        has_indic_script = bool(re.search(r'[\u0C00-\u0C7F\u0900-\u097F]', text))
-
-        if not is_agri_related and not is_greeting_or_short and not has_indic_script:
-            return False, "OFF_TOPIC", (
-                "I am AgriMind AI, your specialized agricultural assistant. "
-                "I can only assist with farming, crop health, irrigation, fertilizer guidance, weather forecasts, and Mandi market prices. "
-                "Please ask a farming-related question!"
-            )
-
+        # Do NOT block unfamiliar agricultural questions using a static keyword allowlist!
         return True, "SAFE_AGRICULTURAL", ""

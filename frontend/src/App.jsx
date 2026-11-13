@@ -36,12 +36,12 @@ export default function App() {
   const [cropDate, setCropDate] = useState('2026-03-01');
 
   // Chat & AI Assistant States
-  const [chatMessages, setChatMessages] = useState([
-    {
-      sender: 'agent',
-      text: 'Hello! I am your AgriMind AI Assistant. Ask questions via text, upload a leaf photo for disease diagnosis, or click the microphone to speak in English, Telugu, or Hindi.'
-    }
-  ]);
+  const initialGreetingMessage = {
+    sender: 'agent',
+    isInitialGreeting: true,
+    text: 'Hello! I am your AgriMind AI Assistant. Ask any agriculture-related question via text, upload a leaf photo for disease diagnosis, or click the microphone to speak in English, Telugu, or Hindi.'
+  };
+  const [chatMessages, setChatMessages] = useState([initialGreetingMessage]);
   const [chatInput, setChatInput] = useState('');
   const [selectedImageB64, setSelectedImageB64] = useState('');
   const [imagePreviewUrl, setImagePreviewUrl] = useState('');
@@ -50,11 +50,15 @@ export default function App() {
 
   // Voice Interaction States
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [voiceProcessingText, setVoiceProcessingText] = useState('');
   const [selectedVoice, setSelectedVoice] = useState('Avinash');
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const stopRequestedRef = useRef(false);
+  const isTranscribingRef = useRef(false);
 
   // Tool Specific Dedicated Views States
   const [weatherData, setWeatherData] = useState(null);
@@ -215,10 +219,26 @@ export default function App() {
   // --------------------------------------------------------------------------
   // Voice Recording & Gnani STT / TTS Handlers
   // --------------------------------------------------------------------------
+  const stopActiveMediaTracks = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => {
+        try {
+          track.stop();
+        } catch (_) {
+          // Ignore track stop errors during cleanup
+        }
+      });
+      mediaStreamRef.current = null;
+    }
+  };
+
   const startRecording = async () => {
+    if (isRecording || isTranscribingRef.current) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
       audioChunksRef.current = [];
+      stopRequestedRef.current = false;
 
       // Determine browser-supported audio MIME type
       let mimeType = 'audio/webm;codecs=opus';
@@ -234,10 +254,15 @@ export default function App() {
       };
 
       mediaRecorder.onstop = async () => {
+        const finalizedChunks = [...audioChunksRef.current];
+        audioChunksRef.current = [];
+        stopActiveMediaTracks();
+        mediaRecorderRef.current = null;
+
         const actualMime = mediaRecorder.mimeType || 'audio/webm';
-        const audioBlob = new Blob(audioChunksRef.current, { type: actualMime });
-        
-        if (audioBlob.size < 200) {
+        const audioBlob = new Blob(finalizedChunks, { type: actualMime });
+
+        if (audioBlob.size < 300) {
           alert("Audio recording was too short or empty. Please hold the mic and speak for at least 1-2 seconds.");
           setVoiceProcessingText('');
           return;
@@ -255,19 +280,27 @@ export default function App() {
       setIsRecording(true);
       setVoiceProcessingText('Listening to your speech (Click mic to finish)...');
     } catch (err) {
+      stopActiveMediaTracks();
       alert("Microphone access was denied or is unavailable. Please allow microphone permissions in your browser.");
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
+    if (mediaRecorderRef.current && isRecording && !stopRequestedRef.current) {
+      stopRequestedRef.current = true;
       setIsRecording(false);
-      setVoiceProcessingText('Converting audio & transcribing with Gnani AI Prisma...');
+      setVoiceProcessingText('Finalizing audio & transcribing with Gnani AI Prisma...');
+      if (mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
     }
   };
 
   const handleAudioUpload = async (audioBlob, filename = 'farmer_voice.webm', mimeType = 'audio/webm') => {
+    if (isTranscribingRef.current) return;
+    isTranscribingRef.current = true;
+    setIsTranscribing(true);
+
     const formData = new FormData();
     formData.append('file', audioBlob, filename);
     formData.append('language', language);
@@ -277,7 +310,7 @@ export default function App() {
         method: 'POST',
         body: formData
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       setVoiceProcessingText('');
 
       if (res.ok && data.text) {
@@ -287,11 +320,14 @@ export default function App() {
       } else if (res.ok && !data.text) {
         alert("Audio received, but no intelligible speech detected. Please speak clearly into your microphone.");
       } else {
-        alert(data.detail || "Voice transcription was unable to process audio.");
+        alert(data.detail || `Voice transcription failed (HTTP ${res.status}).`);
       }
     } catch (e) {
       setVoiceProcessingText('');
       alert("Network error communicating with Gnani Speech service: " + e.message);
+    } finally {
+      isTranscribingRef.current = false;
+      setIsTranscribing(false);
     }
   };
 
@@ -373,13 +409,22 @@ export default function App() {
       imagePreview: imagePreviewUrl || null
     };
 
+    const historyPayload = chatMessages
+      .filter(m => !m.isInitialGreeting && !m.isErrorBanner && m.text)
+      .slice(-8)
+      .map(m => ({
+        role: m.sender === 'user' ? 'user' : 'assistant',
+        content: m.text,
+        tool_used: m.toolUsed || null
+      }));
+
     setChatMessages(prev => [...prev, userMsg]);
     setChatInput('');
     const currentImg = selectedImageB64;
     setSelectedImageB64('');
     setImagePreviewUrl('');
 
-    setLoadingText('AgriMind Agent selecting domain tool...');
+    setLoadingText('AgriMind AI analyzing your agricultural question...');
 
     try {
       const res = await fetch(`${API_BASE}/agent/chat`, {
@@ -393,7 +438,8 @@ export default function App() {
           image_b64: currentImg || null,
           farm_id: selectedFarm ? selectedFarm.id : null,
           crop_id: selectedCrop ? selectedCrop.id : null,
-          language: language
+          language: language,
+          history: historyPayload
         })
       });
 
@@ -402,6 +448,7 @@ export default function App() {
       if (!res.ok) {
         setChatMessages(prev => [...prev, {
           sender: 'agent',
+          isErrorBanner: true,
           text: `⚠️ ${data.detail || 'Error processing request.'}`
         }]);
         return;
@@ -424,6 +471,7 @@ export default function App() {
       setLoadingText('');
       setChatMessages(prev => [...prev, {
         sender: 'agent',
+        isErrorBanner: true,
         text: '⚠️ Network connection failure with backend.'
       }]);
     }
@@ -743,7 +791,19 @@ export default function App() {
             <div className="card">
               <div className="card-title">
                 <span>🤖 AI Agronomist Chat & Voice Engine</span>
-                {selectedFarm && <span className="badge badge-info">{selectedFarm.name}</span>}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {selectedFarm && <span className="badge badge-info">{selectedFarm.name}</span>}
+                  {token && chatMessages.length > 1 && (
+                    <button
+                      className="btn btn-secondary"
+                      style={{ fontSize: '11px', padding: '3px 8px' }}
+                      onClick={() => setChatMessages([initialGreetingMessage])}
+                      title="Start a fresh conversation thread"
+                    >
+                      🗑️ Clear Chat
+                    </button>
+                  )}
+                </div>
               </div>
 
               {!token ? (
@@ -834,11 +894,34 @@ export default function App() {
 
                         {msg.fertilizer && (
                           <div className="assessment-card" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
-                            <div className="assessment-title" style={{ color: '#15803d' }}>🧪 N-P-K Nutrient Plan</div>
+                            <div className="assessment-title" style={{ color: '#15803d' }}>🧪 N-P-K Nutrient Plan ({msg.fertilizer.crop} • {msg.fertilizer.growth_stage})</div>
                             <p style={{ marginTop: '4px' }}><strong>Nutrient Focus:</strong> {msg.fertilizer.nutrient_focus}</p>
                             <ul className="assessment-list">
                               {msg.fertilizer.recommendation?.map((r, i) => <li key={i}>{r}</li>)}
                             </ul>
+                          </div>
+                        )}
+
+                        {msg.weather && (
+                          <div className="assessment-card" style={{ background: '#f8fafc', borderColor: '#cbd5e1' }}>
+                            <div className="assessment-title" style={{ color: '#0f172a' }}>🌦️ Weather Advisory ({msg.weather.location})</div>
+                            <p style={{ marginTop: '4px' }}><strong>Conditions:</strong> {msg.weather.temperature_c}°C • Humidity {msg.weather.humidity_percent}% • {msg.weather.forecast}</p>
+                            <p style={{ marginTop: '4px' }}>{msg.weather.agricultural_advisory}</p>
+                          </div>
+                        )}
+
+                        {msg.market && (
+                          <div className="assessment-card" style={{ background: '#fffbeb', borderColor: '#fde68a' }}>
+                            <div className="assessment-title" style={{ color: '#92400e' }}>📊 Mandi Price Reference ({msg.market.commodity})</div>
+                            <p style={{ marginTop: '4px' }}><strong>Modal Price:</strong> ₹{msg.market.modal_price} ({msg.market.unit}) • {msg.market.mandi}</p>
+                            <p style={{ marginTop: '4px' }}>{msg.market.advisory}</p>
+                          </div>
+                        )}
+
+                        {msg.knowledge && (
+                          <div className="assessment-card" style={{ background: '#faf5ff', borderColor: '#e9d5ff' }}>
+                            <div className="assessment-title" style={{ color: '#6b21a8' }}>📚 {msg.knowledge.source_document}</div>
+                            <p style={{ marginTop: '4px', fontSize: '13px' }}>{msg.knowledge.relevant_section}</p>
                           </div>
                         )}
                       </div>
@@ -872,7 +955,15 @@ export default function App() {
                     <button 
                       className={`btn-mic ${isRecording ? 'recording' : ''}`}
                       onClick={isRecording ? stopRecording : startRecording}
-                      title={isRecording ? "Stop Recording & Transcribe" : "Click to Speak (Gnani AI STT)"}
+                      disabled={isTranscribing}
+                      style={isTranscribing ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
+                      title={
+                        isTranscribing
+                          ? "Transcribing speech..."
+                          : isRecording
+                            ? "Stop Recording & Transcribe"
+                            : "Click to Speak (Gnani AI STT)"
+                      }
                     >
                       🎤
                     </button>

@@ -104,16 +104,25 @@ class VoiceSynthesizeRequest(BaseModel):
     container: Optional[str] = None # "wav", "mp3"
 
 # --- Chat Request & Response ---
+class ChatTurn(BaseModel):
+    role: str = Field(..., description="Turn speaker role: 'user' or 'assistant'.")
+    content: str = Field(..., description="Message text of the turn.")
+    crop: Optional[str] = Field(None, description="Optional resolved crop for that turn.")
+    growth_stage: Optional[str] = Field(None, description="Optional resolved growth stage for that turn.")
+    tool_used: Optional[str] = Field(None, description="Optional tool used for assistant turns.")
+
 class ChatRequest(BaseModel):
     message: str = Field(..., description="Farmer text prompt or transcribed voice query.")
     image_b64: Optional[str] = Field(None, description="Optional Base64 encoded JPEG/PNG/WEBP crop photo.")
     farm_id: Optional[str] = Field(None, description="Optional associated farm ID.")
     crop_id: Optional[str] = Field(None, description="Optional associated crop ID.")
     language: Optional[str] = Field("en", description="Preferred response language: en, te, hi.")
+    history: List[ChatTurn] = Field(default_factory=list, description="Recent multi-turn conversation turns.")
 
 class ChatResponse(BaseModel):
     reply: str
     tool_used: Optional[str] = None
+    detected_language: Optional[str] = None
     assessment: Optional[DiseaseAssessment] = None
     irrigation: Optional[IrrigationResult] = None
     fertilizer: Optional[FertilizerResult] = None

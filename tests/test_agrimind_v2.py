@@ -221,7 +221,7 @@ def test_integrations_health_endpoints():
     assert "providers" in data
     assert "gemini_vision" in data["providers"]
     assert "gnani_ai" in data["providers"]
-    assert data["providers"]["gemini_vision"]["mode"] in ["LIVE", "CONNECTED", "DEMO", "NOT_CONFIGURED", "AUTH_FAILED", "CONFIGURED_NOT_TESTED"]
+    assert data["providers"]["gemini_vision"]["mode"] in ["LIVE", "CONNECTED", "DEMO", "NOT_CONFIGURED", "AUTH_FAILED", "CONFIGURED_NOT_TESTED", "CONNECTION_ERROR", "MODEL_ERROR"]
     assert data["providers"]["gnani_ai"]["mode"] in ["LIVE", "DEMO", "NOT_CONFIGURED", "AUTH_FAILED"]
 
     # Test alias

@@ -184,6 +184,36 @@ STCR_ADJUSTMENT = {
     "high": 0.75     # Reduce 25% nutrient if soil test is abundant
 }
 
+
+def has_verified_crop_rdf(crop_name: Optional[str]) -> bool:
+    """Returns True when a calibrated ICAR RDF table entry exists for the crop."""
+    if not crop_name:
+        return False
+    return crop_name.lower().strip() in ICAR_CROP_RDF
+
+
+def get_stage_nutrient_overview(crop_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Returns verified stage-by-stage ICAR nutrient focus and timings for a crop
+    without guessing an unknown current growth stage.
+    """
+    crop_key = crop_name.lower().strip() if crop_name else ""
+    crop_info = ICAR_CROP_RDF.get(crop_key)
+    if not crop_info:
+        return None
+    stages = {}
+    for stage_name, stage_data in crop_info["splits"].items():
+        stages[stage_name] = {
+            "focus": stage_data["focus"],
+            "timing": stage_data["timing"],
+            "organic": stage_data["organic"],
+        }
+    return {
+        "crop": crop_info["name"],
+        "total_npk_kg_per_acre": crop_info["total_npk_kg_per_acre"],
+        "stages": stages,
+    }
+
 def get_fertilizer_recommendation(
     crop_name: str,
     soil_type: str = "Loam",
